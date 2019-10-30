@@ -20,6 +20,7 @@ class UserSchema(ma.ModelSchema):
         Users,
         "name",
         required=True,
+        allow_none=False,
         validate=[
             validate.Length(min=1, max=128, error="User names must not be empty")
         ],
@@ -27,6 +28,7 @@ class UserSchema(ma.ModelSchema):
     email = field_for(
         Users,
         "email",
+        allow_none=False,
         validate=[
             validate.Email("Emails must be a properly formatted email address"),
             validate.Length(min=1, max=128, error="Emails must not be empty"),
@@ -119,6 +121,21 @@ class UserSchema(ma.ModelSchema):
             if email == current_user.email:
                 return data
             else:
+                confirm = data.get("confirm")
+
+                if bool(confirm) is False:
+                    raise ValidationError(
+                        "Please confirm your current password", field_names=["confirm"]
+                    )
+
+                test = verify_password(
+                    plaintext=confirm, ciphertext=current_user.password
+                )
+                if test is False:
+                    raise ValidationError(
+                        "Your previous password is incorrect", field_names=["confirm"]
+                    )
+
                 if existing_user:
                     raise ValidationError(
                         "Email address has already been used", field_names=["email"]

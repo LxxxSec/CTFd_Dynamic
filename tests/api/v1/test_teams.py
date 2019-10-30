@@ -339,7 +339,7 @@ def test_api_team_patch_me_logged_in_user():
             r = client.patch(
                 "/api/v1/teams/me", json={"name": "team_name", "affiliation": "changed"}
             )
-            assert r.status_code == 400
+            assert r.status_code == 403
     destroy_ctfd(app)
 
 
@@ -379,6 +379,14 @@ def test_api_team_patch_me_logged_in_admin_captain():
 
         app.db.session.commit()
         with login_as_user(app, name="admin") as client:
+            # Users can't null out their team name
+            r = client.patch(
+                "/api/v1/teams/me", json={"name": None}
+            )
+            resp = r.get_json()
+            assert r.status_code == 400
+            assert resp["errors"]["name"] == ["Field may not be null."]
+
             r = client.patch(
                 "/api/v1/teams/me", json={"name": "team_name", "affiliation": "changed"}
             )
@@ -394,7 +402,7 @@ def test_api_team_get_me_solves_not_logged_in():
     app = create_ctfd(user_mode="teams")
     with app.app_context():
         with app.test_client() as client:
-            r = client.get("/api/v1/teams/me/solves")
+            r = client.get("/api/v1/teams/me/solves", json="")
             assert r.status_code == 403
     destroy_ctfd(app)
 
@@ -474,7 +482,7 @@ def test_api_team_get_me_fails_not_logged_in():
     app = create_ctfd(user_mode="teams")
     with app.app_context():
         with app.test_client() as client:
-            r = client.get("/api/v1/teams/me/fails")
+            r = client.get("/api/v1/teams/me/fails", json="")
             assert r.status_code == 403
     destroy_ctfd(app)
 
@@ -551,7 +559,7 @@ def test_api_team_get_me_awards_not_logged_in():
     app = create_ctfd(user_mode="teams")
     with app.app_context():
         with app.test_client() as client:
-            r = client.get("/api/v1/teams/me/awards")
+            r = client.get("/api/v1/teams/me/awards", json="")
             assert r.status_code == 403
     destroy_ctfd(app)
 
@@ -640,7 +648,7 @@ def test_api_team_patch_password():
                 "/api/v1/teams/me",
                 json={"confirm": "password", "password": "new_password"},
             )
-            assert r.status_code == 400
+            assert r.status_code == 403
 
             assert r.get_json() == {
                 "errors": {"": ["Only team captains can edit team information"]},

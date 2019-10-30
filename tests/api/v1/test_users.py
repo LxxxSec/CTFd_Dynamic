@@ -204,21 +204,21 @@ def test_api_users_patch_duplicate_information():
             # Duplicate email
             r = client.patch(
                 "/api/v1/users/me",
-                json={"name": "user2", "email": "user@ctfd.io", "password": "password"},
+                json={"name": "user1", "email": "user2@ctfd.io", "confirm": "password"},
             )
             resp = r.get_json()
             assert r.status_code == 400
-            assert resp["errors"]["name"]
+            assert resp["errors"]["email"]
             assert resp["success"] is False
 
             # Duplicate user
             r = client.patch(
                 "/api/v1/users/me",
-                json={"name": "user", "email": "user2@ctfd.io", "password": "password"},
+                json={"name": "user2", "email": "user1@ctfd.io", "confirm": "password"},
             )
             resp = r.get_json()
             assert r.status_code == 400
-            assert resp["errors"]["email"]
+            assert resp["errors"]["name"]
             assert resp["success"] is False
             assert Users.query.count() == 3
     destroy_ctfd(app)
@@ -427,6 +427,13 @@ def test_api_user_change_name():
             assert resp["data"]["name"] == "user2"
             assert resp["success"] is True
 
+            r = client.patch("/api/v1/users/me", json={"name": None})
+            resp = r.get_json()
+            print(resp)
+            assert r.status_code == 400
+            assert resp["errors"]["name"] == ["Field may not be null."]
+            assert resp["success"] is False
+
             set_config("name_changes", False)
 
             r = client.patch("/api/v1/users/me", json={"name": "new_name"})
@@ -444,6 +451,32 @@ def test_api_user_change_name():
     destroy_ctfd(app)
 
 
+def test_api_user_change_email():
+    """Test that users can change their email via the API"""
+    app = create_ctfd()
+    with app.app_context():
+        register_user(app)
+        user = Users.query.filter_by(id=2).first()
+        app.db.session.commit()
+        with login_as_user(app) as client:
+            # Test users can't submit null
+            r = client.patch("/api/v1/users/me", json={"email": None, "confirm": "password"})
+            resp = r.get_json()
+            print(resp)
+            assert r.status_code == 400
+            assert resp["errors"]["email"] == ["Field may not be null."]
+
+            # Test users can exercise the API
+            r = client.patch("/api/v1/users/me", json={"email": "new_email@email.com", "confirm": "password"})
+            assert r.status_code == 200
+            resp = r.get_json()
+            assert resp["data"]["email"] == "new_email@email.com"
+            assert resp["success"] is True
+            user = Users.query.filter_by(id=2).first()
+            assert user.email == "new_email@email.com"
+    destroy_ctfd(app)
+
+
 def test_api_user_change_verify_email():
     """Test that users are marked unconfirmed if they change their email and verify_emails is turned on"""
     app = create_ctfd()
@@ -454,7 +487,7 @@ def test_api_user_change_verify_email():
         user.verified = True
         app.db.session.commit()
         with login_as_user(app) as client:
-            r = client.patch("/api/v1/users/me", json={"email": "new_email@email.com"})
+            r = client.patch("/api/v1/users/me", json={"email": "new_email@email.com", "confirm": "password"})
             assert r.status_code == 200
             resp = r.get_json()
             assert resp["data"]["email"] == "new_email@email.com"
@@ -473,14 +506,14 @@ def test_api_user_change_email_under_whitelist():
             "domain_whitelist", "whitelisted.com, whitelisted.org, whitelisted.net"
         )
         with login_as_user(app) as client:
-            r = client.patch("/api/v1/users/me", json={"email": "new_email@email.com"})
+            r = client.patch("/api/v1/users/me", json={"email": "new_email@email.com", "confirm": "password"})
             assert r.status_code == 400
             resp = r.get_json()
             assert resp["errors"]["email"]
             assert resp["success"] is False
 
             r = client.patch(
-                "/api/v1/users/me", json={"email": "new_email@whitelisted.com"}
+                "/api/v1/users/me", json={"email": "new_email@whitelisted.com", "confirm": "password"}
             )
             assert r.status_code == 200
             resp = r.get_json()
@@ -494,7 +527,7 @@ def test_api_user_get_me_solves_not_logged_in():
     app = create_ctfd()
     with app.app_context():
         with app.test_client() as client:
-            r = client.get("/api/v1/users/me/solves")
+            r = client.get("/api/v1/users/me/solves", json="")
             assert r.status_code == 403
     destroy_ctfd(app)
 
@@ -569,7 +602,7 @@ def test_api_user_get_me_fails_not_logged_in():
     app = create_ctfd()
     with app.app_context():
         with app.test_client() as client:
-            r = client.get("/api/v1/users/me/fails")
+            r = client.get("/api/v1/users/me/fails", json="")
             assert r.status_code == 403
     destroy_ctfd(app)
 
@@ -641,7 +674,7 @@ def test_api_user_get_me_awards_not_logged_in():
     app = create_ctfd()
     with app.app_context():
         with app.test_client() as client:
-            r = client.get("/api/v1/users/me/awards")
+            r = client.get("/api/v1/users/me/awards", json="")
             assert r.status_code == 403
     destroy_ctfd(app)
 

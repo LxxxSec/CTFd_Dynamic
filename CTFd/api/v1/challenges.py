@@ -29,7 +29,7 @@ from CTFd.utils.config.visibility import (
     challenges_visible,
 )
 from CTFd.utils.user import is_admin, authed
-from CTFd.utils.modes import get_model, USERS_MODE, TEAMS_MODE
+from CTFd.utils.modes import get_model, generate_account_url
 from CTFd.schemas.tags import TagSchema
 from CTFd.schemas.hints import HintSchema
 from CTFd.schemas.flags import FlagSchema
@@ -38,7 +38,7 @@ from CTFd.utils import user as current_user
 from CTFd.utils.user import get_current_team
 from CTFd.utils.user import get_current_user
 from CTFd.plugins.challenges import get_chal_class
-from CTFd.utils.dates import ctf_ended, ctf_paused, ctftime
+from CTFd.utils.dates import ctf_ended, ctf_paused, ctftime, unix_time_to_utc
 from CTFd.utils.logging import log
 from CTFd.utils.security.signing import serialize
 from sqlalchemy.sql import and_
@@ -267,8 +267,14 @@ class Challenge(Resource):
                     Model.banned == False,
                     Model.hidden == False,
                 )
-                .count()
             )
+
+            # Only show solves that happened before freeze time if configured
+            freeze = get_config("freeze")
+            if not is_admin() and freeze:
+                solves = solves.filter(Solves.date < unix_time_to_utc(freeze))
+
+            solves = solves.count()
             response["solves"] = solves
         else:
             response["solves"] = None
@@ -529,21 +535,13 @@ class ChallengeSolves(Resource):
                 dt = datetime.datetime.utcfromtimestamp(freeze)
                 solves = solves.filter(Solves.date < dt)
 
-        endpoint = None
-        if get_config("user_mode") == TEAMS_MODE:
-            endpoint = "teams.public"
-            arg = "team_id"
-        elif get_config("user_mode") == USERS_MODE:
-            endpoint = "users.public"
-            arg = "user_id"
-
         for solve in solves:
             response.append(
                 {
                     "account_id": solve.account_id,
                     "name": solve.account.name,
                     "date": isoformat(solve.date),
-                    "account_url": url_for(endpoint, **{arg: solve.account_id}),
+                    "account_url": generate_account_url(account_id=solve.account_id),
                 }
             )
 

@@ -57,6 +57,10 @@
 			</a>
 		{% endif %}
 
+		{% if team.affiliation %}
+			<h3><span class="badge badge-primary">{{ team.affiliation }}</span></h3>
+		{% endif %}
+
 		<h2 class="text-center">{{ members | length }} members</h2>
 		<h3 id="team-place" class="text-center">
 			{% if place %}
@@ -143,7 +147,9 @@
 							</a>
 						</td>
 						<td class="text-center">
-							<span>
+							<span class="delete-member cursor-pointer" member-id="{{ member.id }}"
+								  member-name="{{ member.name }}" data-toggle="tooltip"
+								  data-placement="top" title="Remove {{ member.name }}">
 								<i class="fas fa-times"></i>
 							</span>
 						</td>
