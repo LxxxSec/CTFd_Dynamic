@@ -1,12 +1,28 @@
-version: '2'
+version: '2.2'
 
 services:
+  ctfd-nginx:
+    image: nginx:1.17
+    volumes:
+      - ./nginx/http.conf:/etc/nginx/nginx.conf   #这里注意
+    user: root
+    restart: always
+    ports:
+      #- "85:80"     #我将这里注释掉了，这里通过nginx转发感觉速度访问速度会变慢，可能因为我的配置问题，多次尝试之后直接开8000端口访问不会对服务造成影响
+      - "443:443"
+    networks:
+        default:
+        internal:
+    depends_on:
+      - ctfd
+    cpus: '1.00'  #可改
+    mem_limit: 150M     #可改
   ctfd:
     build: .
     user: root
     restart: always
     ports:
-      - "8000:8000"
+      - "8000:8000"     #这里原本没开端口，直接打开访问网站速度会加快
     environment:
       - UPLOAD_FOLDER=/var/uploads
       - DATABASE_URL=mysql+pymysql://root:ctfd@db/ctfd
@@ -15,15 +31,21 @@ services:
       - LOG_FOLDER=/var/log/CTFd
       - ACCESS_LOG=-
       - ERROR_LOG=-
+      - REVERSE_PROXY=true
     volumes:
       - .data/CTFd/logs:/var/log/CTFd
       - .data/CTFd/uploads:/var/uploads
       - .:/opt/CTFd:ro
+      - /var/run/docker.sock:/var/run/docker.sock     #这里是添加的
     depends_on:
       - db
     networks:
         default:
         internal:
+        frp:
+            ipv4_address: 172.1.0.2
+    cpus: '1.00'     #可改
+    mem_limit: 450M     #可改
 
   db:
     image: mariadb:10.4
@@ -32,23 +54,55 @@ services:
       - MYSQL_ROOT_PASSWORD=ctfd
       - MYSQL_USER=ctfd
       - MYSQL_PASSWORD=ctfd
-      - MYSQL_DATABASE=ctfd
     volumes:
       - .data/mysql:/var/lib/mysql
     networks:
         internal:
     # This command is required to set important mariadb defaults
     command: [mysqld, --character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci, --wait_timeout=28800, --log-warnings=0]
+    cpus: '1.00'     #可改
+    mem_limit: 750M     #可改
 
   cache:
     image: redis:4
     restart: always
     volumes:
-    - .data/redis:/data
+      - .data/redis:/data
     networks:
         internal:
+    cpus: '1.00'     #可改
+    mem_limit: 450M     #可改
+
+  frpc:    
+    image: glzjin/frp:latest     #赵师傅tql
+    restart: always
+    volumes:
+      - ./frpc:/conf/     #这里注意
+    entrypoint:
+        - /usr/local/bin/frpc
+        - -c
+        - /conf/frpc.ini
+    networks:
+        frp:
+            ipv4_address: 172.1.0.3  #记住此处
+        frp-containers:
+    cpus: '1.00'     #可改
+    mem_limit: 250M     #可改
 
 networks:
     default:
     internal:
         internal: true
+    frp:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.1.0.0/16
+    frp-containers:
+        driver: overlay
+        internal: true
+        ipam:
+            config:
+                - subnet: 172.2.0.0/16
+
+
